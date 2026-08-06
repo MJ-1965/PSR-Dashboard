@@ -23,7 +23,7 @@ st.markdown("""
         z-index: 1 !important;
     }
 
-    /* 본문 안전 여백 설정 (타이틀 폰트 확대에 맞춰 padding-top 4.5rem 보정) */
+    /* 본문 안전 여백 설정 */
     .block-container {
         padding-top: 4.5rem !important;  
         padding-bottom: 1.0rem !important;
@@ -42,12 +42,12 @@ st.markdown("""
         padding: 0px !important;
     }
 
-    /* ★ [1.5배 확대 완료] 메인 본문 타이틀 및 우측 컴퍼니 타이틀 디자인 (28px -> 42px) */
+    /* 메인 본문 타이틀 및 우측 컴퍼니 타이틀 디자인 (42px) */
     .dashboard-title {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
         font-weight: 800 !important;
         color: #1A202C !important;
-        font-size: 42px !important;          /* 1.5배 확대 */
+        font-size: 42px !important;
         letter-spacing: -0.5px !important;
         line-height: 1.2 !important;     
     }
@@ -56,7 +56,7 @@ st.markdown("""
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
         font-weight: 800 !important;
         color: #1A202C !important;
-        font-size: 42px !important;          /* 1.5배 확대 */
+        font-size: 42px !important;          
         letter-spacing: -0.5px !important;
         line-height: 1.2 !important;     
         text-align: right !important;
@@ -188,7 +188,7 @@ if os.path.exists(EXCEL_FILE_PATH):
             df_price = fix_excel_header(df_price)
 
         # ====================================================================
-        # 1행: [인원 관리] (1/3)  +  [재고 & 발주 현황] (2/3)
+        # 1행: [인원 관리] (1/3)  +  [주요 아이템 현황] (2/3)
         # ====================================================================
         col_top_left, col_top_right = st.columns([1, 2])
 
@@ -233,9 +233,10 @@ if os.path.exists(EXCEL_FILE_PATH):
                     
                     st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- [1행 우측] 재고 & 발주 현황 ---
+        # --- [1행 우측] 주요 아이템 현황 (기존: 재고 & 발주 현황) ---
         with col_top_right:
-            st.markdown('<div class="section-title">📦 재고 & 발주 현황</div>', unsafe_allow_html=True)
+            # ★ [요청 변경 적용] 문구를 '주요 아이템 현황'으로 수정
+            st.markdown('<div class="section-title">📦 주요 아이템 현황</div>', unsafe_allow_html=True)
             
             date_cols = [col for col in df_stock.columns if '발주일정' in str(col)]
             type_cols = [col for col in df_stock.columns if '분류' in str(col)]
