@@ -114,7 +114,7 @@ st.markdown("""
         margin-top: 2px;
     }
 
-    /* 6. 원부자재 구매액 2x2 카드 스타일 */
+    /* 6. 원부자재 구매액 25년 (기본 스타일) */
     .grid-purchase-card {
         background-color: #FFFFFF;
         border: 1.5px solid #CBD5E1;
@@ -127,19 +127,48 @@ st.markdown("""
     .grid-purchase-title {
         font-size: 13px;
         font-weight: 800;
-        color: #4A5568;
+        color: #64748B;
         margin-bottom: 2px;
     }
     .grid-purchase-val {
         font-size: 20px;
         font-weight: 900;
-        color: #0D6DFD;
+        color: #334155;
         line-height: 1.1;
     }
     .grid-purchase-sub {
         font-size: 10px;
-        color: #718096;
+        color: #94A3B8;
         font-weight: 600;
+        margin-top: 3px;
+    }
+
+    /* ★ 7. 원부자재 구매액 26년 (배지 제거 및 돋보이는 2026 하이라이트 스타일) */
+    .grid-purchase-card-highlight {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F0F7FF 100%);
+        border: 2px solid #0D6DFD;
+        border-radius: 12px;
+        padding: 10px 12px;
+        text-align: center;
+        box-shadow: 0 4px 10px rgba(13, 109, 253, 0.12);
+        margin-bottom: 10px;
+    }
+    .grid-purchase-title-hl {
+        font-size: 13px;
+        font-weight: 900;
+        color: #0F172A;
+        margin-bottom: 2px;
+    }
+    .grid-purchase-val-hl {
+        font-size: 21px;
+        font-weight: 900;
+        color: #0D6DFD;
+        line-height: 1.1;
+    }
+    .grid-purchase-sub-hl {
+        font-size: 10.5px;
+        color: #3B82F6;
+        font-weight: 700;
         margin-top: 3px;
     }
 </style>
@@ -332,14 +361,13 @@ if os.path.exists(EXCEL_FILE_PATH):
             st.dataframe(df_stock.style.apply(style_stock_table, axis=1), use_container_width=True, height=210)
 
         # ====================================================================
-        # 2행: [원부자재 구매액 (3중 안전 파싱 구조)]
+        # 2행: [원부자재 구매액 (배지 제거 & 26년 깔끔 강조 스타일)]
         # ====================================================================
         col_mid_left, col_mid_right = st.columns([1, 2])
 
         with col_mid_left:
             st.markdown('<div class="section-title" style="margin-top:10px;">💰 원부자재 구매액</div>', unsafe_allow_html=True)
             
-            # 절대 비지 않도록 세팅된 기본 딕셔너리
             p_data = {
                 '25년 전체': {'tot': '$17,679K', 'sub': '원 $15,521K / 부 $2,158K'},
                 '25년 월평균': {'tot': '$1,473K', 'sub': '원 $1,293K / 부 $180K'},
@@ -355,7 +383,6 @@ if os.path.exists(EXCEL_FILE_PATH):
                         try: return float(s)
                         except: return 0.0
 
-                    # 숫자가 포함된 행들만 차례대로 수집 (1행: 25전체, 2행: 25월평균, 3행: 26누적, 4행: 26월평균)
                     valid_rows = []
                     for r_i in range(len(df_purchase_raw)):
                         row_vals = df_purchase_raw.iloc[r_i].values
@@ -364,7 +391,6 @@ if os.path.exists(EXCEL_FILE_PATH):
                             cat_text = str(row_vals[0]) if len(row_vals) > 0 else ""
                             valid_rows.append((cat_text, nums[0], nums[1]))
 
-                    # 1. 키워드 기반 정밀 할당
                     for cat_text, val_raw, val_sub in valid_rows:
                         c_clean = cat_text.replace(" ", "")
                         
@@ -380,12 +406,10 @@ if os.path.exists(EXCEL_FILE_PATH):
                                 'sub': f"원 {format_k_dollar(val_raw)} / 부 {format_k_dollar(val_sub)}"
                             }
 
-                    # 2. 만약 키워드가 완전히 일치하지 않는 경우, 순서대로 1~4번째 수치 데이터 자동 할당
                     order_keys = ['25년 전체', '25년 월평균', '26년 누적', '26년 월평균']
                     for idx, (cat_text, val_raw, val_sub) in enumerate(valid_rows[:4]):
                         if idx < len(order_keys):
                             k = order_keys[idx]
-                            # 기존에 설정되지 않은 항목만 순서대로 채움
                             if p_data[k]['tot'] == '-':
                                 p_data[k] = {
                                     'tot': format_k_dollar(val_raw + val_sub),
@@ -394,6 +418,7 @@ if os.path.exists(EXCEL_FILE_PATH):
                 except:
                     pass
 
+            # 1행: 2025년 카드 (기본 타일)
             g_r1_c1, g_r1_c2 = st.columns([1, 1])
             with g_r1_c1:
                 v1 = p_data.get('25년 전체', {'tot': '$17,679K', 'sub': '원 $15,521K / 부 $2,158K'})
@@ -414,23 +439,24 @@ if os.path.exists(EXCEL_FILE_PATH):
                 </div>
                 """, unsafe_allow_html=True)
 
+            # 2행: ★ 2026년 카드 (배지 제거 + 블루 톤 입체 강조)
             g_r2_c1, g_r2_c2 = st.columns([1, 1])
             with g_r2_c1:
                 v3 = p_data.get('26년 누적', {'tot': '$10,059K', 'sub': '원 $8,817K / 부 $1,242K'})
                 st.markdown(f"""
-                <div class="grid-purchase-card">
-                    <div class="grid-purchase-title">26년 누적</div>
-                    <div class="grid-purchase-val">{v3['tot']}</div>
-                    <div class="grid-purchase-sub">{v3['sub']}</div>
+                <div class="grid-purchase-card-highlight">
+                    <div class="grid-purchase-title-hl">26년 누적</div>
+                    <div class="grid-purchase-val-hl">{v3['tot']}</div>
+                    <div class="grid-purchase-sub-hl">{v3['sub']}</div>
                 </div>
                 """, unsafe_allow_html=True)
             with g_r2_c2:
                 v4 = p_data.get('26년 월평균', {'tot': '$1,437K', 'sub': '원 $1,260K / 부 $177K'})
                 st.markdown(f"""
-                <div class="grid-purchase-card">
-                    <div class="grid-purchase-title">26년 월평균</div>
-                    <div class="grid-purchase-val">{v4['tot']}</div>
-                    <div class="grid-purchase-sub">{v4['sub']}</div>
+                <div class="grid-purchase-card-highlight">
+                    <div class="grid-purchase-title-hl">26년 월평균</div>
+                    <div class="grid-purchase-val-hl">{v4['tot']}</div>
+                    <div class="grid-purchase-sub-hl">{v4['sub']}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
