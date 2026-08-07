@@ -25,7 +25,7 @@ st.markdown("""
 
     /* 본문 안전 여백 설정 */
     .block-container {
-        padding-top: 4.5rem !important;  
+        padding-top: 1.5rem !important;  
         padding-bottom: 1.0rem !important;
         padding-left: 2.0rem !important;
         padding-right: 2.0rem !important;
@@ -42,7 +42,7 @@ st.markdown("""
         padding: 0px !important;
     }
 
-    /* 메인 본문 타이틀 및 우측 컴퍼니 타이틀 디자인 (42px) */
+    /* 메인 본문 타이틀 및 우측 컴퍼니 타이틀 디자인 */
     .dashboard-title {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
         font-weight: 800 !important;
@@ -209,6 +209,95 @@ st.markdown("""
         color: #0F172A;
         line-height: 1.2;
     }
+
+    /* 10. 월별 출고 요약 미니 카드 */
+    .summary-card-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 8px;
+        margin-bottom: 15px;
+    }
+    .summary-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        padding: 10px 12px;
+        flex: 1 1 calc(50% - 10px); 
+        min-width: 140px;
+        box-sizing: border-box;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        border-left: 4px solid #3B82F6;
+    }
+    .summary-card-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: #64748B;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .summary-card-val {
+        font-size: 22px;
+        font-weight: 900;
+    }
+
+    /* 11. 재고 요약 (Inventory) 리스트 카드 스타일 */
+    .inv-list-container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 5px;
+    }
+    .inv-item-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        box-sizing: border-box;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .inv-header {
+        font-size: 14px;
+        font-weight: 800;
+        color: #1A202C;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+    }
+    .inv-body {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 4px;
+        margin-top: 4px;
+    }
+    .inv-metric {
+        font-size: 12px;
+        color: #718096;
+        font-weight: 600;
+    }
+    .inv-metric .val {
+        font-size: 16px;
+        font-weight: 900;
+        color: #2D3748;
+    }
+    .inv-notes {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 6px;
+    }
+    .inv-badge {
+        font-size: 11px;
+        background: #F8FAFC;
+        color: #475569;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+        width: fit-content;
+        border: 1px solid #E2E8F0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -253,7 +342,7 @@ def fix_excel_header(df):
     df.index = df.index + 1
     return df
 
-# 금액 절삭 포맷터 ($1000 미만 반올림 절삭 -> $1,260K)
+# 금액 절삭 포맷터
 def format_k_dollar(val):
     try:
         if pd.isna(val) or val == '' or val == '-':
@@ -317,6 +406,12 @@ if os.path.exists(EXCEL_FILE_PATH):
             if "원부자재" in sheet or "구매액" in sheet:
                 purchase_sheet = sheet
                 break
+                
+        inv_summary_sheet = None
+        for sheet in sheet_names:
+            if "월별" in sheet and "재고" in sheet:
+                inv_summary_sheet = sheet
+                break
 
         df_hr = pd.read_excel(file_bytes, sheet_name=hr_sheet)
         df_stock = pd.read_excel(file_bytes, sheet_name=stock_sheet)
@@ -324,6 +419,7 @@ if os.path.exists(EXCEL_FILE_PATH):
         
         df_price_raw = pd.read_excel(file_bytes, sheet_name=price_sheet, header=None) if price_sheet else None
         df_purchase_raw = pd.read_excel(file_bytes, sheet_name=purchase_sheet, header=None) if purchase_sheet else None
+        df_inv_summary_raw = pd.read_excel(file_bytes, sheet_name=inv_summary_sheet, header=None) if inv_summary_sheet else None
 
         df_hr = fix_excel_header(df_hr)
         df_stock = fix_excel_header(df_stock)
@@ -334,7 +430,6 @@ if os.path.exists(EXCEL_FILE_PATH):
         # ====================================================================
         col_top_left, col_top_right = st.columns([1, 2])
 
-        # --- [1행 좌측] 인원 관리 ---
         with col_top_left:
             st.markdown('<div class="section-title">👥 인원 관리</div>', unsafe_allow_html=True)
             
@@ -375,7 +470,6 @@ if os.path.exists(EXCEL_FILE_PATH):
                     
                     st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- [1행 우측] 주요 아이템 현황 ---
         with col_top_right:
             st.markdown('<div class="section-title">📦 주요 아이템 현황</div>', unsafe_allow_html=True)
             
@@ -429,7 +523,7 @@ if os.path.exists(EXCEL_FILE_PATH):
         # ====================================================================
         # 2행: [원부자재 구매액]
         # ====================================================================
-        col_mid_left, col_mid_right = st.columns([1, 2])
+        col_mid_left, col_mid_right = st.columns([1, 2]) 
 
         with col_mid_left:
             st.markdown('<div class="section-title" style="margin-top:10px;">💰 원부자재 구매액</div>', unsafe_allow_html=True)
@@ -524,7 +618,6 @@ if os.path.exists(EXCEL_FILE_PATH):
                 </div>
                 """, unsafe_allow_html=True)
 
-        # --- [2행 우측] 소전각 가격 변동 트렌드 ---
         with col_mid_right:
             st.markdown('<div class="section-title" style="margin-top:10px;">🐮 소전각 가격 변동 트렌드</div>', unsafe_allow_html=True)
             
@@ -538,39 +631,32 @@ if os.path.exists(EXCEL_FILE_PATH):
                         except:
                             return None
 
-                    # ★ [요청 적용] H3(H열3행), H4, H5, H6 셀 직접 지정 파싱 (인덱스: Row 2, 3, 4, 5 / Col 7)
                     avg_market_str = "$4.40"
                     avg_buy_str = "$4.33"
                     diff_str = "-2%"
                     cum_qty_str = "41FTL"
 
                     try:
-                        # 엑셀의 H열은 7번째 인덱스 (0,1,2,3,4,5,6,7 -> H)
                         col_h_idx = 7 if len(df_price_raw.columns) > 7 else len(df_price_raw.columns) - 1
 
-                        # H3 (Row index 2)
                         if len(df_price_raw) > 2:
                             val_h3 = df_price_raw.iloc[2, col_h_idx]
                             avg_market_str = format_currency_val(val_h3, "$4.40")
 
-                        # H4 (Row index 3)
                         if len(df_price_raw) > 3:
                             val_h4 = df_price_raw.iloc[3, col_h_idx]
                             avg_buy_str = format_currency_val(val_h4, "$4.33")
 
-                        # H5 (Row index 4)
                         if len(df_price_raw) > 4:
                             val_h5 = df_price_raw.iloc[4, col_h_idx]
                             diff_str = format_percent(val_h5)
 
-                        # H6 (Row index 5)
                         if len(df_price_raw) > 5:
                             val_h6 = df_price_raw.iloc[5, col_h_idx]
                             cum_qty_str = str(val_h6).strip() if pd.notna(val_h6) else "41FTL"
                     except:
                         pass
 
-                    # 날짜 및 수치 열 위치 기반 차트용 파싱
                     h_row = -1
                     for r_i in range(min(5, len(df_price_raw))):
                         row_cells = [str(x) for x in df_price_raw.iloc[r_i].values if pd.notna(x)]
@@ -603,8 +689,7 @@ if os.path.exists(EXCEL_FILE_PATH):
                             vals_market = data_part.iloc[:, market_idx][valid_m].apply(parse_num_float)
                             vals_buy = data_part.iloc[:, buy_idx][valid_m].apply(parse_num_float) if buy_idx is not None else None
 
-                            # ★ 상단 H3, H4, H5, H6 미니 카드 4개 출력
-                            kpi_c1, kpi_c2, kpi_c3, kpi_c4, _ = st.columns([1, 1, 1, 1, 2])
+                            kpi_c1, kpi_c2, kpi_c3, kpi_c4, _ = st.columns([1, 1, 1, 1, 1])
                             with kpi_c1:
                                 st.markdown(f"""
                                 <div class="price-kpi-card">
@@ -620,11 +705,12 @@ if os.path.exists(EXCEL_FILE_PATH):
                                 </div>
                                 """, unsafe_allow_html=True)
                             with kpi_c3:
-                                diff_color = "#16A34A" if "-" in diff_str else "#DC2626"
+                                formatted_diff = format_percent(diff_str)
+                                diff_color = "#16A34A" if "-" in formatted_diff else "#DC2626"
                                 st.markdown(f"""
                                 <div class="price-kpi-card">
                                     <div class="price-kpi-title">평균 단가 차이</div>
-                                    <div class="price-kpi-val" style="color:{diff_color};">{diff_str}</div>
+                                    <div class="price-kpi-val" style="color:{diff_color};">{formatted_diff}</div>
                                 </div>
                                 """, unsafe_allow_html=True)
                             with kpi_c4:
@@ -637,14 +723,12 @@ if os.path.exists(EXCEL_FILE_PATH):
 
                             fig = go.Figure()
 
-                            # 1. 시장가격 (파란색 실선)
                             fig.add_trace(go.Scatter(
                                 x=dates, y=vals_market,
                                 mode='lines', name='시장가격',
                                 line=dict(color='#0d6dfd', width=2.5, shape='spline')
                             ))
 
-                            # 2. 구매가격 (빨간색 점)
                             if vals_buy is not None and vals_buy.notna().sum() > 0:
                                 fig.add_trace(go.Scatter(
                                     x=dates, y=vals_buy,
@@ -665,82 +749,120 @@ if os.path.exists(EXCEL_FILE_PATH):
                     st.warning(f"차트 데이터 처리 중 알림: {ex}")
 
         # ====================================================================
-        # 3행: [출고 타임라인 달력]
+        # 3행: [월별 출고 요약] (좌측) + [월별 재고 요약] (우측)
         # ====================================================================
-        st.markdown('<div class="section-title" style="margin-top:10px;">📅 출고 타임라인</div>', unsafe_allow_html=True)
+        col_bot_left, col_bot_right = st.columns([1, 2])
         
-        target_date_col = next((col for col in df_schedule.columns if '예정일' in str(col) or '일' in str(col) or '날짜' in str(col)), None)
-        type_col = [col for col in df_schedule.columns if '구분' in str(col) or '분류' in str(col)]
-        item_col = [col for col in df_schedule.columns if '품목' in str(col) or '이름' in str(col)]
-        qty_col = [col for col in df_schedule.columns if '수량' in str(col) or '개수' in str(col)]
-
-        cal_df = df_schedule.copy()
-        if target_date_col:
-            cal_df['parsed_date'] = pd.to_datetime(cal_df[target_date_col], errors='coerce')
-
-        if target_date_col and type_col and item_col:
-            default_year = today.year
-            default_month = today.month
-
-            c_yr, c_m, _ = st.columns([1, 1, 10])
-            year_range = list(range(default_year - 1, default_year + 2))
+        with col_bot_left:
+            st.markdown('<div class="section-title" style="margin-top:10px;">📅 월별 출고 요약</div>', unsafe_allow_html=True)
             
-            default_year_idx = year_range.index(default_year) if default_year in year_range else 1
+            cal_df = df_schedule.copy()
             
-            view_year = c_yr.selectbox("연도 선택", year_range, index=default_year_idx, key="cal_yr")
-            view_month = c_m.selectbox("월 선택", range(1, 13), index=default_month - 1, key="cal_m")
+            target_date_col = next((col for col in cal_df.columns if '예정일' in str(col) or '일' in str(col) or '날짜' in str(col)), None)
+            target_item_col = next((col for col in cal_df.columns if '품목' in str(col) or '이름' in str(col) or '거래처' in str(col)), None)
+            
+            if target_item_col is None and len(cal_df.columns) > 1:
+                target_item_col = cal_df.columns[1]
 
-            cal = calendar.Calendar(firstweekday=6)
-            month_days = cal.monthdayscalendar(view_year, view_month)
+            if target_date_col and target_item_col:
+                cal_df['parsed_date'] = pd.to_datetime(cal_df[target_date_col], errors='coerce')
 
-            html_code = """
-            <style>
-                .cal-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: white; table-layout: fixed; border-radius: 8px; overflow: hidden; border: 1px solid #E2E8F0; margin-bottom: 5px; }
-                .cal-th { background-color: #F8FAFC; text-align: center; padding: 4px; font-weight: bold; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; width: 14.28%; font-size: 12px; color: #4A5568; }
-                .cal-td { vertical-align: top; height: 75px; padding: 4px 6px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; position: relative; }
-                .cal-day-num { font-weight: 400 !important; font-size: 18px; margin-bottom: 4px; color: #1A202C; line-height: 1.0; }
-                .cal-today { background-color: #EFF6FF; border: 2px solid #3B82F6 !important; }
-                .cal-event { font-size: 10px; padding: 1px 4px; margin-bottom: 2px; border-radius: 4px; color: white; font-weight: bold; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-                .ev-생산 { background-color: #10B981; } .ev-출고 { background-color: #EF4444; } .ev-입고 { background-color: #F59E0B; } .ev-default { background-color: #6B7280; }
-            </style>
-            <table class="cal-table">
-                <thead>
-                    <tr>
-                        <th class="cal-th" style="color:#EF4444;">일</th><th class="cal-th">월</th><th class="cal-th">화</th><th class="cal-th">수</th>
-                        <th class="cal-th">목</th><th class="cal-th">금</th><th class="cal-th" style="color:#3B82F6;">토</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
+                default_year = today.year
+                default_month = today.month
 
-            for week in month_days:
-                html_code += "<tr>"
-                for day in week:
-                    if day == 0:
-                        html_code += "<td class='cal-td' style='background-color:#F8FAFC;'></td>"
-                    else:
-                        current_cell_date = f"{view_year}-{view_month:02d}-{day:02d}"
-                        is_today = (view_year == today.year and view_month == today.month and day == today.day)
-                        td_class = "cal-td cal-today" if is_today else "cal-td"
-                        
-                        html_code += f"<td class='{td_class}'>"
-                        html_code += f"<div class='cal-day-num'>{day}</div>"
-                        
-                        day_events = cal_df[cal_df['parsed_date'].dt.strftime('%Y-%m-%d') == current_cell_date]
-                        for _, row in day_events.iterrows():
-                            ev_type = str(row[type_col[0]]).strip()
-                            ev_item = str(row[item_col[0]])
-                            ev_qty = f" ({row[qty_col[0]]})" if qty_col and pd.notna(row[qty_col[0]]) else ""
-                            css_class = f"ev-{ev_type}" if f"ev-{ev_type}" in ['ev-생산', 'ev-출고', 'ev-입고'] else "ev-default"
-                            html_code += f"<div class='cal-event {css_class}'>[{ev_type}] {ev_item}{ev_qty}</div>"
-                        html_code += "</td>"
-                html_code += "</tr>"
-            html_code += "</tbody></table>"
-            st.markdown(html_code, unsafe_allow_html=True)
+                c_yr, c_m = st.columns(2)
+                year_range = list(range(default_year - 1, default_year + 2))
+                default_year_idx = year_range.index(default_year) if default_year in year_range else 1
+                
+                view_year = c_yr.selectbox("연도 선택", year_range, index=default_year_idx, key="cal_yr")
+                view_month = c_m.selectbox("월 선택", range(1, 13), index=default_month - 1, key="cal_m")
+
+                filtered_df = cal_df[
+                    (cal_df['parsed_date'].dt.year == view_year) & 
+                    (cal_df['parsed_date'].dt.month == view_month)
+                ]
+
+                summary_counts = filtered_df[target_item_col].value_counts()
+
+                if not summary_counts.empty:
+                    html_cards = '<div class="summary-card-container">'
+                    for item_name, count in summary_counts.items():
+                        item_str = str(item_name).strip()
+                        if item_str and item_str.lower() not in ['nan', 'none']:
+                            val_color = "#0D6DFD" if count > 5 else "#1A202C"
+                            html_cards += f'<div class="summary-card"><div class="summary-card-title">{item_str}</div><div class="summary-card-val" style="color:{val_color};">{count}건</div></div>'
+                    html_cards += '</div>'
+                    st.markdown(html_cards, unsafe_allow_html=True)
+                else:
+                    st.info(f"💡 {view_year}년 {view_month}월에 계획된 출고 일정이 없습니다.")
+            else:
+                st.warning("엑셀에서 '예정일' 또는 '관련품목' 열을 찾을 수 없습니다.")
+                
+        with col_bot_right:
+            inv_title = "월별 재고 요약"
+            
+            def get_cell_val(df, r, c):
+                if df is not None and not df.empty and r < len(df) and c < len(df.columns):
+                    val = df.iloc[r, c]
+                    if pd.notna(val) and str(val).strip().lower() != 'nan':
+                        return str(val).strip()
+                return ""
+
+            def get_int_val(df, r, c):
+                val = get_cell_val(df, r, c)
+                if not val or val == "-": return val
+                try:
+                    num = float(val.replace(',', '').strip())
+                    return f"{int(round(num)):,}"
+                except:
+                    return val
+            
+            if df_inv_summary_raw is not None and not df_inv_summary_raw.empty:
+                b2_val = get_cell_val(df_inv_summary_raw, 1, 1)
+                if b2_val:
+                    inv_title = b2_val
+
+            st.markdown(f'<div class="section-title" style="margin-top:10px;">📦 {inv_title}</div>', unsafe_allow_html=True)
+
+            item1 = {"name": get_cell_val(df_inv_summary_raw, 4, 4) or "PK 국탕류 재고", "box": get_int_val(df_inv_summary_raw, 4, 5) or "0", "pal": get_int_val(df_inv_summary_raw, 4, 6) or "-", "notes": []}
+            n1_1 = get_cell_val(df_inv_summary_raw, 4, 7)
+            if n1_1: item1["notes"].append(f"{n1_1} : {get_int_val(df_inv_summary_raw, 4, 8)}{get_cell_val(df_inv_summary_raw, 4, 9)}")
+            n1_2 = get_cell_val(df_inv_summary_raw, 5, 7)
+            if n1_2: item1["notes"].append(f"{n1_2} : {get_int_val(df_inv_summary_raw, 5, 8)}{get_cell_val(df_inv_summary_raw, 5, 9)}")
+
+            item2 = {"name": get_cell_val(df_inv_summary_raw, 6, 4) or "한상 국탕류 재고", "box": get_int_val(df_inv_summary_raw, 6, 5) or "0", "pal": get_int_val(df_inv_summary_raw, 6, 6) or "-", "notes": []}
+            
+            item3 = {"name": get_cell_val(df_inv_summary_raw, 7, 4) or "PK 가열육 재고", "box": get_int_val(df_inv_summary_raw, 7, 5) or "0", "pal": get_int_val(df_inv_summary_raw, 7, 6) or "-", "notes": []}
+            
+            item4 = {"name": get_cell_val(df_inv_summary_raw, 8, 4) or "Kroger 소불고기 재고", "box": get_int_val(df_inv_summary_raw, 8, 5) or "0", "pal": get_int_val(df_inv_summary_raw, 8, 6) or "-", "notes": []}
+            
+            item5 = {"name": get_cell_val(df_inv_summary_raw, 9, 4) or "TJ 소불고기 재고", "box": get_int_val(df_inv_summary_raw, 9, 5) or "0", "pal": get_int_val(df_inv_summary_raw, 9, 6) or "-", "notes": []}
+            n5_1 = get_cell_val(df_inv_summary_raw, 9, 7)
+            if n5_1: item5["notes"].append(f"{n5_1} : {get_int_val(df_inv_summary_raw, 9, 8)}{get_cell_val(df_inv_summary_raw, 9, 9)}")
+            n5_2 = get_cell_val(df_inv_summary_raw, 10, 7)
+            if n5_2: item5["notes"].append(f"{n5_2} : {get_int_val(df_inv_summary_raw, 10, 8)}{get_cell_val(df_inv_summary_raw, 10, 9)}")
+
+            def render_inv_card(item, badge_text, badge_bg, badge_color):
+                notes_html = ""
+                if item["notes"]:
+                    notes_html = '<div class="inv-notes">' + "".join([f'<span class="inv-badge">📌 {n}</span>' for n in item["notes"]]) + '</div>'
+                
+                badge_html = f'<span style="background-color:{badge_bg}; color:{badge_color}; border-radius:4px; padding:2px 6px; font-size:11px; font-weight:800; margin-right:6px; vertical-align:text-bottom;">{badge_text}</span>'
+                
+                return f'<div class="inv-item-card"><div class="inv-header">{badge_html}{item["name"]}</div><div class="inv-body"><div class="inv-metric"><span class="val">{item["box"]}</span> 박스</div><div class="inv-metric"><span class="val">{item["pal"]}</span> 팔렛</div></div>{notes_html}</div>'
+
+            inv_col1, inv_col2 = st.columns(2)
+            
+            with inv_col1:
+                st.markdown(f'<div class="inv-list-container">{render_inv_card(item1, "🍲 국탕류", "#FFEDD5", "#C2410C")}{render_inv_card(item2, "🍲 국탕류", "#FFEDD5", "#C2410C")}</div>', unsafe_allow_html=True)
+                
+            # ★ 텍스트를 "🥩 육류" 에서 "🥩 가열육"으로 변경
+            with inv_col2:
+                st.markdown(f'<div class="inv-list-container">{render_inv_card(item3, "🥩 가열육", "#F3E8FF", "#7E22CE")}{render_inv_card(item4, "🥩 가열육", "#F3E8FF", "#7E22CE")}{render_inv_card(item5, "🥩 가열육", "#F3E8FF", "#7E22CE")}</div>', unsafe_allow_html=True)
 
         # 시스템 최하단 안내
         st.markdown(f"""
-        <div style="background-color: #EDF2F7; padding: 6px 12px; border-radius: 8px; text-align: center; font-size: 12px; color: #718096; margin-top: 10px;">
+        <div style="background-color: #EDF2F7; padding: 6px 12px; border-radius: 8px; text-align: center; font-size: 12px; color: #718096; margin-top: 25px;">
             💡 <code>{EXCEL_FILE_PATH}</code> 파일을 수정하고 저장(Ctrl+S)하면 수 초 이내에 실시간 업데이트됩니다.
         </div>
         """, unsafe_allow_html=True)
