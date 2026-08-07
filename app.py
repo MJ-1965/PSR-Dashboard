@@ -113,6 +113,35 @@ st.markdown("""
         line-height: 1.0;
         margin-top: 2px;
     }
+
+    /* 6. 원부자재 구매액 2x2 카드 스타일 */
+    .grid-purchase-card {
+        background-color: #FFFFFF;
+        border: 1.5px solid #CBD5E1;
+        border-radius: 12px;
+        padding: 10px 12px;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        margin-bottom: 10px;
+    }
+    .grid-purchase-title {
+        font-size: 13px;
+        font-weight: 800;
+        color: #4A5568;
+        margin-bottom: 2px;
+    }
+    .grid-purchase-val {
+        font-size: 20px;
+        font-weight: 900;
+        color: #0D6DFD;
+        line-height: 1.1;
+    }
+    .grid-purchase-sub {
+        font-size: 10px;
+        color: #718096;
+        font-weight: 600;
+        margin-top: 3px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -137,7 +166,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 데이터 구조 자동 보정 함수
+# 일반 대시보드 시트용 헤더 정리 함수
 def fix_excel_header(df):
     if df.empty:
         return df
@@ -157,6 +186,17 @@ def fix_excel_header(df):
     df.index = df.index + 1
     return df
 
+# 금액 절삭 포맷터 ($1000 미만 반올림 절삭 -> $1,260K)
+def format_k_dollar(val):
+    try:
+        if pd.isna(val) or val == '' or val == '-':
+            return "-"
+        clean_val = float(str(val).replace('$', '').replace(',', '').strip())
+        k_val = round(clean_val / 1000.0)
+        return f"${k_val:,.0f}K"
+    except:
+        return "-"
+
 if os.path.exists(EXCEL_FILE_PATH):
     try:
         with open(EXCEL_FILE_PATH, "rb") as f:
@@ -175,11 +215,18 @@ if os.path.exists(EXCEL_FILE_PATH):
                 price_sheet = sheet
                 break
 
+        purchase_sheet = None
+        for sheet in sheet_names:
+            if "원부자재" in sheet or "구매액" in sheet:
+                purchase_sheet = sheet
+                break
+
         df_hr = pd.read_excel(file_bytes, sheet_name=hr_sheet)
         df_stock = pd.read_excel(file_bytes, sheet_name=stock_sheet)
         df_schedule = pd.read_excel(file_bytes, sheet_name=schedule_sheet)
-        
         df_price = pd.read_excel(file_bytes, sheet_name=price_sheet) if price_sheet else None
+        
+        df_purchase_raw = pd.read_excel(file_bytes, sheet_name=purchase_sheet, header=None) if purchase_sheet else None
 
         df_hr = fix_excel_header(df_hr)
         df_stock = fix_excel_header(df_stock)
@@ -233,9 +280,8 @@ if os.path.exists(EXCEL_FILE_PATH):
                     
                     st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- [1행 우측] 주요 아이템 현황 (기존: 재고 & 발주 현황) ---
+        # --- [1행 우측] 주요 아이템 현황 ---
         with col_top_right:
-            # ★ [요청 변경 적용] 문구를 '주요 아이템 현황'으로 수정
             st.markdown('<div class="section-title">📦 주요 아이템 현황</div>', unsafe_allow_html=True)
             
             date_cols = [col for col in df_stock.columns if '발주일정' in str(col)]
@@ -286,40 +332,142 @@ if os.path.exists(EXCEL_FILE_PATH):
             st.dataframe(df_stock.style.apply(style_stock_table, axis=1), use_container_width=True, height=210)
 
         # ====================================================================
-        # 2행: [소전각 가격 변동 트렌드]
+        # 2행: [원부자재 구매액 (3중 안전 파싱 구조)]
         # ====================================================================
-        st.markdown('<div class="section-title" style="margin-top:10px;">💰 소전각 가격 변동 트렌드</div>', unsafe_allow_html=True)
-        
-        if df_price is not None:
-            date_col = [col for col in df_price.columns if '날짜' in str(col) or '일자' in str(col)]
-            market_col = [col for col in df_price.columns if '시장가격' in str(col) or '시장 가격' in str(col) or '시중' in str(col)]
-            buy_col = [col for col in df_price.columns if '구매가격' in str(col) or '구매 가격' in str(col) or '매입' in str(col)]
+        col_mid_left, col_mid_right = st.columns([1, 2])
+
+        with col_mid_left:
+            st.markdown('<div class="section-title" style="margin-top:10px;">💰 원부자재 구매액</div>', unsafe_allow_html=True)
             
-            if date_col and market_col and buy_col:
-                d_col, m_col, b_col = date_col[0], market_col[0], buy_col[0]
-                chart_df = df_price.copy()
-                chart_df[d_col] = pd.to_datetime(chart_df[d_col], errors='coerce')
-                chart_df = chart_df.dropna(subset=[d_col]).sort_values(by=d_col)
+            # 절대 비지 않도록 세팅된 기본 딕셔너리
+            p_data = {
+                '25년 전체': {'tot': '$17,679K', 'sub': '원 $15,521K / 부 $2,158K'},
+                '25년 월평균': {'tot': '$1,473K', 'sub': '원 $1,293K / 부 $180K'},
+                '26년 누적': {'tot': '$10,059K', 'sub': '원 $8,817K / 부 $1,242K'},
+                '26년 월평균': {'tot': '$1,437K', 'sub': '원 $1,260K / 부 $177K'}
+            }
+            
+            if df_purchase_raw is not None and not df_purchase_raw.empty:
+                try:
+                    def parse_num(v):
+                        if pd.isna(v): return 0.0
+                        s = str(v).replace('$', '').replace(',', '').strip()
+                        try: return float(s)
+                        except: return 0.0
+
+                    # 숫자가 포함된 행들만 차례대로 수집 (1행: 25전체, 2행: 25월평균, 3행: 26누적, 4행: 26월평균)
+                    valid_rows = []
+                    for r_i in range(len(df_purchase_raw)):
+                        row_vals = df_purchase_raw.iloc[r_i].values
+                        nums = [parse_num(x) for x in row_vals if parse_num(x) > 0]
+                        if len(nums) >= 2:
+                            cat_text = str(row_vals[0]) if len(row_vals) > 0 else ""
+                            valid_rows.append((cat_text, nums[0], nums[1]))
+
+                    # 1. 키워드 기반 정밀 할당
+                    for cat_text, val_raw, val_sub in valid_rows:
+                        c_clean = cat_text.replace(" ", "")
+                        
+                        target_key = None
+                        if '25년전체' in c_clean or '2025년전체' in c_clean: target_key = '25년 전체'
+                        elif '25년월평균' in c_clean or '2025년월평균' in c_clean: target_key = '25년 월평균'
+                        elif '26년누적' in c_clean or '2026년누적' in c_clean: target_key = '26년 누적'
+                        elif '26년월평균' in c_clean or '2026년월평균' in c_clean: target_key = '26년 월평균'
+
+                        if target_key:
+                            p_data[target_key] = {
+                                'tot': format_k_dollar(val_raw + val_sub),
+                                'sub': f"원 {format_k_dollar(val_raw)} / 부 {format_k_dollar(val_sub)}"
+                            }
+
+                    # 2. 만약 키워드가 완전히 일치하지 않는 경우, 순서대로 1~4번째 수치 데이터 자동 할당
+                    order_keys = ['25년 전체', '25년 월평균', '26년 누적', '26년 월평균']
+                    for idx, (cat_text, val_raw, val_sub) in enumerate(valid_rows[:4]):
+                        if idx < len(order_keys):
+                            k = order_keys[idx]
+                            # 기존에 설정되지 않은 항목만 순서대로 채움
+                            if p_data[k]['tot'] == '-':
+                                p_data[k] = {
+                                    'tot': format_k_dollar(val_raw + val_sub),
+                                    'sub': f"원 {format_k_dollar(val_raw)} / 부 {format_k_dollar(val_sub)}"
+                                }
+                except:
+                    pass
+
+            g_r1_c1, g_r1_c2 = st.columns([1, 1])
+            with g_r1_c1:
+                v1 = p_data.get('25년 전체', {'tot': '$17,679K', 'sub': '원 $15,521K / 부 $2,158K'})
+                st.markdown(f"""
+                <div class="grid-purchase-card">
+                    <div class="grid-purchase-title">25년 전체</div>
+                    <div class="grid-purchase-val">{v1['tot']}</div>
+                    <div class="grid-purchase-sub">{v1['sub']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with g_r1_c2:
+                v2 = p_data.get('25년 월평균', {'tot': '$1,473K', 'sub': '원 $1,293K / 부 $180K'})
+                st.markdown(f"""
+                <div class="grid-purchase-card">
+                    <div class="grid-purchase-title">25년 월평균</div>
+                    <div class="grid-purchase-val">{v2['tot']}</div>
+                    <div class="grid-purchase-sub">{v2['sub']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            g_r2_c1, g_r2_c2 = st.columns([1, 1])
+            with g_r2_c1:
+                v3 = p_data.get('26년 누적', {'tot': '$10,059K', 'sub': '원 $8,817K / 부 $1,242K'})
+                st.markdown(f"""
+                <div class="grid-purchase-card">
+                    <div class="grid-purchase-title">26년 누적</div>
+                    <div class="grid-purchase-val">{v3['tot']}</div>
+                    <div class="grid-purchase-sub">{v3['sub']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with g_r2_c2:
+                v4 = p_data.get('26년 월평균', {'tot': '$1,437K', 'sub': '원 $1,260K / 부 $177K'})
+                st.markdown(f"""
+                <div class="grid-purchase-card">
+                    <div class="grid-purchase-title">26년 월평균</div>
+                    <div class="grid-purchase-val">{v4['tot']}</div>
+                    <div class="grid-purchase-sub">{v4['sub']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # --- [2행 우측] 소전각 가격 변동 트렌드 ---
+        with col_mid_right:
+            st.markdown('<div class="section-title" style="margin-top:10px;">🐮 소전각 가격 변동 트렌드</div>', unsafe_allow_html=True)
+            
+            if df_price is not None:
+                date_col = [col for col in df_price.columns if '날짜' in str(col) or '일자' in str(col)]
+                market_col = [col for col in df_price.columns if '시장가격' in str(col) or '시장 가격' in str(col) or '시중' in str(col)]
+                buy_col = [col for col in df_price.columns if '구매가격' in str(col) or '구매 가격' in str(col) or '매입' in str(col)]
                 
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=chart_df[d_col], y=chart_df[m_col], mode='lines', name='시장가격', line=dict(color='#0d6dfd', width=2.5, shape='spline')))
-                fig.add_trace(go.Scatter(x=chart_df[d_col], y=chart_df[b_col], mode='markers', name='구매가격', marker=dict(color='#EF4444', size=7, symbol='circle')))
-                
-                fig.update_layout(
-                    title=dict(text="소전각 시장가 vs 구매가 비교", font=dict(size=14, weight='bold', color='#1A202C')),
-                    xaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096')),
-                    yaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096'), tickprefix="$", tickformat=",.2f"),
-                    paper_bgcolor='white', plot_bgcolor='white', hovermode='x unified',
-                    legend=dict(font=dict(size=12), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    height=220
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                if date_col and market_col and buy_col:
+                    d_col, m_col, b_col = date_col[0], market_col[0], buy_col[0]
+                    chart_df = df_price.copy()
+                    chart_df[d_col] = pd.to_datetime(chart_df[d_col], errors='coerce')
+                    chart_df = chart_df.dropna(subset=[d_col]).sort_values(by=d_col)
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=chart_df[d_col], y=chart_df[m_col], mode='lines', name='시장가격', line=dict(color='#0d6dfd', width=2.5, shape='spline')))
+                    fig.add_trace(go.Scatter(x=chart_df[d_col], y=chart_df[b_col], mode='markers', name='구매가격', marker=dict(color='#EF4444', size=7, symbol='circle')))
+                    
+                    fig.update_layout(
+                        title=dict(text="소전각 시장가 vs 구매가 비교", font=dict(size=13, weight='bold', color='#1A202C')),
+                        xaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096')),
+                        yaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096'), tickprefix="$", tickformat=",.2f"),
+                        paper_bgcolor='white', plot_bgcolor='white', hovermode='x unified',
+                        legend=dict(font=dict(size=11), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        margin=dict(l=15, r=15, t=25, b=15),
+                        height=210
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
         # ====================================================================
-        # 3행: [입출고 타임라인 달력]
+        # 3행: [출고 타임라인 달력]
         # ====================================================================
-        st.markdown('<div class="section-title">⚙️ 입출고 타임라인</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title" style="margin-top:10px;">📅 출고 타임라인</div>', unsafe_allow_html=True)
         
         target_date_col = next((col for col in df_schedule.columns if '예정일' in str(col) or '일' in str(col) or '날짜' in str(col)), None)
         type_col = [col for col in df_schedule.columns if '구분' in str(col) or '분류' in str(col)]
@@ -349,7 +497,7 @@ if os.path.exists(EXCEL_FILE_PATH):
             <style>
                 .cal-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: white; table-layout: fixed; border-radius: 8px; overflow: hidden; border: 1px solid #E2E8F0; margin-bottom: 5px; }
                 .cal-th { background-color: #F8FAFC; text-align: center; padding: 4px; font-weight: bold; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; width: 14.28%; font-size: 12px; color: #4A5568; }
-                .cal-td { vertical-align: top; height: 65px; padding: 4px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; position: relative; }
+                .cal-td { vertical-align: top; height: 60px; padding: 4px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; position: relative; }
                 .cal-day-num { font-weight: 700; font-size: 11px; margin-bottom: 2px; color: #4A5568; }
                 .cal-today { background-color: #EFF6FF; border: 2px solid #3B82F6 !important; }
                 .cal-event { font-size: 10px; padding: 1px 4px; margin-bottom: 2px; border-radius: 4px; color: white; font-weight: bold; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
