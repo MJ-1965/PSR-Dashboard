@@ -143,7 +143,7 @@ st.markdown("""
         margin-top: 3px;
     }
 
-    /* ★ 7. 원부자재 구매액 26년 (배지 제거 및 돋보이는 2026 하이라이트 스타일) */
+    /* 7. 원부자재 구매액 26년 (2026 하이라이트 스타일) */
     .grid-purchase-card-highlight {
         background: linear-gradient(180deg, #FFFFFF 0%, #F0F7FF 100%);
         border: 2px solid #0D6DFD;
@@ -170,6 +170,21 @@ st.markdown("""
         color: #3B82F6;
         font-weight: 700;
         margin-top: 3px;
+    }
+
+    /* 8. 드롭다운(Selectbox) 박스 배경 흰색 지정 */
+    div[data-testid="stSelectbox"] div[role="combobox"],
+    div[data-testid="stSelectbox"] > div > div,
+    div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+    }
+    div[data-testid="stSelectbox"] div[role="combobox"] * {
+        background-color: transparent !important;
+        color: #1E293B !important;
+        font-weight: 700 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -361,7 +376,7 @@ if os.path.exists(EXCEL_FILE_PATH):
             st.dataframe(df_stock.style.apply(style_stock_table, axis=1), use_container_width=True, height=210)
 
         # ====================================================================
-        # 2행: [원부자재 구매액 (배지 제거 & 26년 깔끔 강조 스타일)]
+        # 2행: [원부자재 구매액]
         # ====================================================================
         col_mid_left, col_mid_right = st.columns([1, 2])
 
@@ -418,7 +433,6 @@ if os.path.exists(EXCEL_FILE_PATH):
                 except:
                     pass
 
-            # 1행: 2025년 카드 (기본 타일)
             g_r1_c1, g_r1_c2 = st.columns([1, 1])
             with g_r1_c1:
                 v1 = p_data.get('25년 전체', {'tot': '$17,679K', 'sub': '원 $15,521K / 부 $2,158K'})
@@ -439,7 +453,6 @@ if os.path.exists(EXCEL_FILE_PATH):
                 </div>
                 """, unsafe_allow_html=True)
 
-            # 2행: ★ 2026년 카드 (배지 제거 + 블루 톤 입체 강조)
             g_r2_c1, g_r2_c2 = st.columns([1, 1])
             with g_r2_c1:
                 v3 = p_data.get('26년 누적', {'tot': '$10,059K', 'sub': '원 $8,817K / 부 $1,242K'})
@@ -508,7 +521,7 @@ if os.path.exists(EXCEL_FILE_PATH):
             default_year = today.year
             default_month = today.month
 
-            c_yr, c_m = st.columns([1, 1])
+            c_yr, c_m, _ = st.columns([1, 1, 10])
             year_range = list(range(default_year - 1, default_year + 2))
             
             default_year_idx = year_range.index(default_year) if default_year in year_range else 1
@@ -519,12 +532,13 @@ if os.path.exists(EXCEL_FILE_PATH):
             cal = calendar.Calendar(firstweekday=6)
             month_days = cal.monthdayscalendar(view_year, view_month)
 
+            # ★ [요청 적용] .cal-day-num 요소의 font-size: 18px 지정
             html_code = """
             <style>
                 .cal-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: white; table-layout: fixed; border-radius: 8px; overflow: hidden; border: 1px solid #E2E8F0; margin-bottom: 5px; }
                 .cal-th { background-color: #F8FAFC; text-align: center; padding: 4px; font-weight: bold; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; width: 14.28%; font-size: 12px; color: #4A5568; }
-                .cal-td { vertical-align: top; height: 60px; padding: 4px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; position: relative; }
-                .cal-day-num { font-weight: 700; font-size: 11px; margin-bottom: 2px; color: #4A5568; }
+                .cal-td { vertical-align: top; height: 75px; padding: 4px 6px; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; position: relative; }
+                .cal-day-num { font-weight: 400 !important; font-size: 18px; margin-bottom: 4px; color: #1A202C; line-height: 1.0; }
                 .cal-today { background-color: #EFF6FF; border: 2px solid #3B82F6 !important; }
                 .cal-event { font-size: 10px; padding: 1px 4px; margin-bottom: 2px; border-radius: 4px; color: white; font-weight: bold; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
                 .ev-생산 { background-color: #10B981; } .ev-출고 { background-color: #EF4444; } .ev-입고 { background-color: #F59E0B; } .ev-default { background-color: #6B7280; }
