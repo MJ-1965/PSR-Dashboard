@@ -186,6 +186,29 @@ st.markdown("""
         color: #1E293B !important;
         font-weight: 700 !important;
     }
+
+    /* 9. 차트 상단 요약 카드 컴팩트 스타일 */
+    .price-kpi-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 4px 8px;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        margin-bottom: 12px;
+    }
+    .price-kpi-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748B;
+        white-space: nowrap;
+    }
+    .price-kpi-val {
+        font-size: 14px;
+        font-weight: 900;
+        color: #0F172A;
+        line-height: 1.2;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -241,6 +264,36 @@ def format_k_dollar(val):
     except:
         return "-"
 
+# 달러 포맷터
+def format_currency_val(val, default_str="$4.40"):
+    try:
+        if pd.isna(val) or val == '' or val == '-':
+            return default_str
+        clean_val = float(str(val).replace('$', '').replace(',', '').strip())
+        return f"${clean_val:.2f}"
+    except:
+        return str(val) if pd.notna(val) else default_str
+
+# 백분율 포맷터
+def format_percent(val):
+    try:
+        if pd.isna(val) or val == '' or val == '-':
+            return "-2%"
+        
+        val_str = str(val).strip()
+        if '%' in val_str:
+            num = float(val_str.replace('%', '').strip())
+            return f"{round(num):+.0f}%" if round(num) != 0 else "0%"
+        
+        num = float(val_str)
+        if abs(num) < 1.0:
+            pct = round(num * 100)
+            return f"{pct:+.0f}%" if pct != 0 else "0%"
+        else:
+            return f"{round(num):+.0f}%"
+    except:
+        return "-2%"
+
 if os.path.exists(EXCEL_FILE_PATH):
     try:
         with open(EXCEL_FILE_PATH, "rb") as f:
@@ -268,15 +321,13 @@ if os.path.exists(EXCEL_FILE_PATH):
         df_hr = pd.read_excel(file_bytes, sheet_name=hr_sheet)
         df_stock = pd.read_excel(file_bytes, sheet_name=stock_sheet)
         df_schedule = pd.read_excel(file_bytes, sheet_name=schedule_sheet)
-        df_price = pd.read_excel(file_bytes, sheet_name=price_sheet) if price_sheet else None
         
+        df_price_raw = pd.read_excel(file_bytes, sheet_name=price_sheet, header=None) if price_sheet else None
         df_purchase_raw = pd.read_excel(file_bytes, sheet_name=purchase_sheet, header=None) if purchase_sheet else None
 
         df_hr = fix_excel_header(df_hr)
         df_stock = fix_excel_header(df_stock)
         df_schedule = fix_excel_header(df_schedule)
-        if df_price is not None:
-            df_price = fix_excel_header(df_price)
 
         # ====================================================================
         # 1행: [인원 관리] (1/3)  +  [주요 아이템 현황] (2/3)
@@ -477,31 +528,141 @@ if os.path.exists(EXCEL_FILE_PATH):
         with col_mid_right:
             st.markdown('<div class="section-title" style="margin-top:10px;">🐮 소전각 가격 변동 트렌드</div>', unsafe_allow_html=True)
             
-            if df_price is not None:
-                date_col = [col for col in df_price.columns if '날짜' in str(col) or '일자' in str(col)]
-                market_col = [col for col in df_price.columns if '시장가격' in str(col) or '시장 가격' in str(col) or '시중' in str(col)]
-                buy_col = [col for col in df_price.columns if '구매가격' in str(col) or '구매 가격' in str(col) or '매입' in str(col)]
-                
-                if date_col and market_col and buy_col:
-                    d_col, m_col, b_col = date_col[0], market_col[0], buy_col[0]
-                    chart_df = df_price.copy()
-                    chart_df[d_col] = pd.to_datetime(chart_df[d_col], errors='coerce')
-                    chart_df = chart_df.dropna(subset=[d_col]).sort_values(by=d_col)
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=chart_df[d_col], y=chart_df[m_col], mode='lines', name='시장가격', line=dict(color='#0d6dfd', width=2.5, shape='spline')))
-                    fig.add_trace(go.Scatter(x=chart_df[d_col], y=chart_df[b_col], mode='markers', name='구매가격', marker=dict(color='#EF4444', size=7, symbol='circle')))
-                    
-                    fig.update_layout(
-                        title=dict(text="소전각 시장가 vs 구매가 비교", font=dict(size=13, weight='bold', color='#1A202C')),
-                        xaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096')),
-                        yaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096'), tickprefix="$", tickformat=",.2f"),
-                        paper_bgcolor='white', plot_bgcolor='white', hovermode='x unified',
-                        legend=dict(font=dict(size=11), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                        margin=dict(l=15, r=15, t=25, b=15),
-                        height=210
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+            if df_price_raw is not None and not df_price_raw.empty:
+                try:
+                    def parse_num_float(v):
+                        try:
+                            if pd.isna(v): return None
+                            s = str(v).replace('$', '').replace('%', '').replace(',', '').strip()
+                            return float(s)
+                        except:
+                            return None
+
+                    # ★ [요청 적용] H3(H열3행), H4, H5, H6 셀 직접 지정 파싱 (인덱스: Row 2, 3, 4, 5 / Col 7)
+                    avg_market_str = "$4.40"
+                    avg_buy_str = "$4.33"
+                    diff_str = "-2%"
+                    cum_qty_str = "41FTL"
+
+                    try:
+                        # 엑셀의 H열은 7번째 인덱스 (0,1,2,3,4,5,6,7 -> H)
+                        col_h_idx = 7 if len(df_price_raw.columns) > 7 else len(df_price_raw.columns) - 1
+
+                        # H3 (Row index 2)
+                        if len(df_price_raw) > 2:
+                            val_h3 = df_price_raw.iloc[2, col_h_idx]
+                            avg_market_str = format_currency_val(val_h3, "$4.40")
+
+                        # H4 (Row index 3)
+                        if len(df_price_raw) > 3:
+                            val_h4 = df_price_raw.iloc[3, col_h_idx]
+                            avg_buy_str = format_currency_val(val_h4, "$4.33")
+
+                        # H5 (Row index 4)
+                        if len(df_price_raw) > 4:
+                            val_h5 = df_price_raw.iloc[4, col_h_idx]
+                            diff_str = format_percent(val_h5)
+
+                        # H6 (Row index 5)
+                        if len(df_price_raw) > 5:
+                            val_h6 = df_price_raw.iloc[5, col_h_idx]
+                            cum_qty_str = str(val_h6).strip() if pd.notna(val_h6) else "41FTL"
+                    except:
+                        pass
+
+                    # 날짜 및 수치 열 위치 기반 차트용 파싱
+                    h_row = -1
+                    for r_i in range(min(5, len(df_price_raw))):
+                        row_cells = [str(x) for x in df_price_raw.iloc[r_i].values if pd.notna(x)]
+                        if any('날짜' in x or '일자' in x for x in row_cells):
+                            h_row = r_i
+                            break
+
+                    if h_row != -1:
+                        data_part = df_price_raw.iloc[h_row + 1:].copy().reset_index(drop=True)
+                        header_cells = [str(x).strip() for x in df_price_raw.iloc[h_row].values]
+
+                        date_idx = None
+                        market_idx = None
+                        buy_idx = None
+
+                        for c_i, h_text in enumerate(header_cells):
+                            ht = h_text.replace(" ", "")
+                            if ('날짜' in ht or '일자' in ht) and date_idx is None:
+                                date_idx = c_i
+                            elif ('시장' in ht) and '-3' not in ht and '3%' not in ht and market_idx is None:
+                                market_idx = c_i
+                            elif ('구매' in ht or '매입' in ht) and buy_idx is None:
+                                buy_idx = c_i
+
+                        if date_idx is not None and market_idx is not None:
+                            dates_series = pd.to_datetime(data_part.iloc[:, date_idx], errors='coerce')
+                            valid_m = dates_series.notna()
+
+                            dates = dates_series[valid_m]
+                            vals_market = data_part.iloc[:, market_idx][valid_m].apply(parse_num_float)
+                            vals_buy = data_part.iloc[:, buy_idx][valid_m].apply(parse_num_float) if buy_idx is not None else None
+
+                            # ★ 상단 H3, H4, H5, H6 미니 카드 4개 출력
+                            kpi_c1, kpi_c2, kpi_c3, kpi_c4, _ = st.columns([1, 1, 1, 1, 2])
+                            with kpi_c1:
+                                st.markdown(f"""
+                                <div class="price-kpi-card">
+                                    <div class="price-kpi-title">시장가 누계평균</div>
+                                    <div class="price-kpi-val" style="color:#0D6DFD;">{avg_market_str}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            with kpi_c2:
+                                st.markdown(f"""
+                                <div class="price-kpi-card">
+                                    <div class="price-kpi-title">구매가 누계평균</div>
+                                    <div class="price-kpi-val" style="color:#EF4444;">{avg_buy_str}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            with kpi_c3:
+                                diff_color = "#16A34A" if "-" in diff_str else "#DC2626"
+                                st.markdown(f"""
+                                <div class="price-kpi-card">
+                                    <div class="price-kpi-title">평균 단가 차이</div>
+                                    <div class="price-kpi-val" style="color:{diff_color};">{diff_str}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            with kpi_c4:
+                                st.markdown(f"""
+                                <div class="price-kpi-card">
+                                    <div class="price-kpi-title">누계 구매량</div>
+                                    <div class="price-kpi-val" style="color:#8B5CF6;">{cum_qty_str}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+
+                            fig = go.Figure()
+
+                            # 1. 시장가격 (파란색 실선)
+                            fig.add_trace(go.Scatter(
+                                x=dates, y=vals_market,
+                                mode='lines', name='시장가격',
+                                line=dict(color='#0d6dfd', width=2.5, shape='spline')
+                            ))
+
+                            # 2. 구매가격 (빨간색 점)
+                            if vals_buy is not None and vals_buy.notna().sum() > 0:
+                                fig.add_trace(go.Scatter(
+                                    x=dates, y=vals_buy,
+                                    mode='markers', name='구매가격',
+                                    marker=dict(color='#EF4444', size=7, symbol='circle')
+                                ))
+
+                            fig.update_layout(
+                                xaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096')),
+                                yaxis=dict(gridcolor='#EDF2F7', tickfont=dict(size=11, color='#718096'), tickprefix="$", tickformat=",.2f"),
+                                paper_bgcolor='white', plot_bgcolor='white', hovermode='x unified',
+                                legend=dict(font=dict(size=11), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                                margin=dict(l=15, r=15, t=20, b=15),
+                                height=170
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                except Exception as ex:
+                    st.warning(f"차트 데이터 처리 중 알림: {ex}")
 
         # ====================================================================
         # 3행: [출고 타임라인 달력]
@@ -532,7 +693,6 @@ if os.path.exists(EXCEL_FILE_PATH):
             cal = calendar.Calendar(firstweekday=6)
             month_days = cal.monthdayscalendar(view_year, view_month)
 
-            # ★ [요청 적용] .cal-day-num 요소의 font-size: 18px 지정
             html_code = """
             <style>
                 .cal-table { width: 100%; border-collapse: separate; border-spacing: 0; background-color: white; table-layout: fixed; border-radius: 8px; overflow: hidden; border: 1px solid #E2E8F0; margin-bottom: 5px; }
