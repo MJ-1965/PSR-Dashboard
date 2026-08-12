@@ -4,6 +4,7 @@ import os
 import calendar
 import io
 import re
+import html
 from datetime import datetime
 import plotly.graph_objects as go
 
@@ -40,7 +41,7 @@ st.markdown("""
         align-items: center !important;
         width: 100% !important;
         margin-top: 0px !important;
-        margin-bottom: 40px !important; 
+        margin-bottom: 30px !important; 
         padding: 0px !important;
     }
 
@@ -201,7 +202,7 @@ st.markdown("""
         margin-top: 2px;
     }
 
-    /* 10. OB Schedule Mini Cards */
+    /* 10. OB Schedule Mini Cards CSS */
     .summary-card-container {
         display: flex;
         flex-wrap: wrap;
@@ -216,10 +217,9 @@ st.markdown("""
         flex: 1 1 calc(50% - 8px); 
         min-width: 130px;
         box-sizing: border-box;
-        border-left: 4px solid #3B82F6;
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
     }
     .summary-left {
         display: flex;
@@ -228,9 +228,9 @@ st.markdown("""
         margin-right: 8px;
     }
     .summary-card-title {
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 800;
-        color: #334155;
+        color: #1E293B;
         margin-bottom: 2px;
         white-space: nowrap;
         overflow: hidden;
@@ -239,12 +239,14 @@ st.markdown("""
     .summary-card-val {
         font-size: 22px;
         font-weight: 900;
+        line-height: 1.1;
     }
     .summary-right {
         display: flex;
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: 4px;
+        max-width: 135px;
     }
     .date-chip {
         background: #F1F5F9;
@@ -529,6 +531,8 @@ with col_top2:
     target_item_col = next((col for col in cal_df.columns if 'customer' in str(col).lower() or 'customoer' in str(col).lower() or '품목' in str(col)), None)
     if target_item_col is None and len(cal_df.columns) > 1: target_item_col = cal_df.columns[1]
 
+    color_col_name = next((col for col in cal_df.columns if 'color' in str(col).lower() or '색상' in str(col)), None)
+
     if target_date_col and target_item_col:
         cal_df['parsed_date'] = pd.to_datetime(cal_df[target_date_col], errors='coerce')
         default_year, default_month = today.year, today.month
@@ -543,13 +547,31 @@ with col_top2:
 
         if not summary_counts.empty:
             html_cards = '<div class="summary-card-container">'
+            
             for item_name, count in summary_counts.items():
-                item_str = str(item_name).strip()
-                if item_str and item_str.lower() not in ['nan', 'none']:
+                item_raw_str = str(item_name).strip()
+                if item_raw_str and item_raw_str.lower() not in ['nan', 'none']:
+                    item_safe_title = html.escape(item_raw_str)
                     val_color = "#0D6DFD" if count > 5 else "#1A202C"
+                    
+                    # Raw Data의 Color 열 값 매핑
+                    card_border_color = "#3B82F6"
+                    if color_col_name:
+                        matched_colors = filtered_df[filtered_df[target_item_col] == item_name][color_col_name].dropna().astype(str).str.strip().str.lower().tolist()
+                        if matched_colors:
+                            first_color = matched_colors[0]
+                            if 'red' in first_color or '빨강' in first_color:
+                                card_border_color = "#EF4444"
+                            elif 'green' in first_color or '초록' in first_color:
+                                card_border_color = "#22C55E"
+                            elif 'blue' in first_color or '파랑' in first_color:
+                                card_border_color = "#3B82F6"
+
                     sorted_dates = filtered_df[filtered_df[target_item_col] == item_name].sort_values('parsed_date')['parsed_date']
                     dates_html = "".join([f'<span class="date-chip">{d.month}/{d.day}</span>' for d in sorted_dates if pd.notna(d)])
-                    html_cards += f'<div class="summary-card"><div class="summary-left"><div class="summary-card-title">{item_str}</div><div class="summary-card-val" style="color:{val_color};">{count} <span style="font-size:12px; font-weight:700;">orders</span></div></div><div class="summary-right">{dates_html}</div></div>'
+                    
+                    html_cards += f'''<div class="summary-card" style="border-left: 5px solid {card_border_color};"><div class="summary-left"><div class="summary-card-title">{item_safe_title}</div><div class="summary-card-val" style="color:{val_color};">{count} <span style="font-size:11px; font-weight:700;">orders</span></div></div><div class="summary-right">{dates_html}</div></div>'''
+            
             html_cards += '</div>'
             st.markdown(html_cards, unsafe_allow_html=True)
         else:
@@ -643,7 +665,7 @@ with col_top3:
         notes_html = ""
         if item["notes"]:
             notes_html = '<div class="inv-notes">' + "".join([f'<span class="inv-badge">📌 {n}</span>' for n in item["notes"]]) + '</div>'
-        badge_html = f'<span style="background-color:{item["bg"]}; color:{item["color"]}; border-radius:4px; padding:2px 6px; font-size:11px; font-weight:800; margin-right:4px;">{item["tag"]}</span>'
+        badge_html = f'<span style="background-color:{item["bg"]}; color:{item["color"]}; border-radius:4px; padding:2px 6px; font-size:10px; font-weight:800; margin-right:4px;">{item["tag"]}</span>'
         return f'<div class="inv-item-card"><div class="inv-header">{badge_html} <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{item["name"]}</span></div><div class="inv-body"><div class="inv-metric"><span class="val">{item["box"]}</span> cs</div><div class="inv-divider">|</div><div class="inv-metric"><span class="val">{item["pal"]}</span> plt</div></div>{notes_html}</div>'
 
     bbq_items = [item for item in inv_items if 'BBQ' in item.get('tag', '')]
@@ -730,7 +752,6 @@ with col_bot1:
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(x=dates, y=vals_market, mode='lines', name='Market Price', line=dict(color='#0d6dfd', width=2.5, shape='spline')))
                     
-                    # ★ [방법 1 적용] 연결선(지시선)을 이용하여 빨간 점 가격을 안 겹치게 위/아래 교차 배치
                     if vals_buy is not None and vals_buy.notna().sum() > 0:
                         valid_buy_df = pd.DataFrame({'date': dates, 'val': vals_buy}).dropna()
                         
@@ -798,7 +819,7 @@ with col_bot2:
         <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:6px; padding:5px 12px; font-size:13px; font-weight:700;">🚨 Overdue/Today: <span style="color:#CC0000;">{count_red}</span></div>
         <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:6px; padding:5px 12px; font-size:13px; font-weight:700;">⏰ Within 3 Days: <span style="color:#CC6600;">{count_orange}</span></div>
         <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:6px; padding:5px 12px; font-size:13px; font-weight:700;">⚠️ Within 7 Days: <span style="color:#888800;">{count_yellow}</span></div>
-        <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:6px; padding:5px 12px; font-size:13px; font-weight:700;">✅ 8+ Days: <span style="color:#22543D;">{count_green}</span></div>
+        <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:6px; padding:4px 12px; font-size:13px; font-weight:700;">✅ 8+ Days: <span style="color:#22543D;">{count_green}</span></div>
     </div>
     """, unsafe_allow_html=True)
     
