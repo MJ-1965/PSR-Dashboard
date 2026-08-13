@@ -570,7 +570,8 @@ with col_top2:
                     sorted_dates = filtered_df[filtered_df[target_item_col] == item_name].sort_values('parsed_date')['parsed_date']
                     dates_html = "".join([f'<span class="date-chip">{d.month}/{d.day}</span>' for d in sorted_dates if pd.notna(d)])
                     
-                    html_cards += f'''<div class="summary-card" style="border-left: 5px solid {card_border_color};"><div class="summary-left"><div class="summary-card-title">{item_safe_title}</div><div class="summary-card-val" style="color:{val_color};">{count} <span style="font-size:11px; font-weight:700;">orders</span></div></div><div class="summary-right">{dates_html}</div></div>'''
+                    # ★ [요청 반영] orders -> order로 변경
+                    html_cards += f'''<div class="summary-card" style="border-left: 5px solid {card_border_color};"><div class="summary-left"><div class="summary-card-title">{item_safe_title}</div><div class="summary-card-val" style="color:{val_color};">{count} <span style="font-size:11px; font-weight:700;">order</span></div></div><div class="summary-right">{dates_html}</div></div>'''
             
             html_cards += '</div>'
             st.markdown(html_cards, unsafe_allow_html=True)
